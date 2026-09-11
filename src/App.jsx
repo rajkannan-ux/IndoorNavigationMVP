@@ -561,7 +561,10 @@ function getGenericMalayalamReply(
 ------------------------------------------------------- */
 
 function getMalayalamVoice() {
-  if (!("speechSynthesis" in window)) {
+  if (
+    typeof window === "undefined" ||
+    !("speechSynthesis" in window)
+  ) {
     return null;
   }
 
@@ -581,14 +584,23 @@ function getMalayalamVoice() {
   const malayalamVoice = voices.find(
     (voice) =>
       voice.lang &&
-      voice.lang.toLowerCase().startsWith("ml")
+      voice.lang
+        .toLowerCase()
+        .startsWith("ml")
   );
 
   return malayalamVoice || null;
 }
 
 function speakText(text, language) {
-  if (!("speechSynthesis" in window)) {
+  if (
+    typeof window === "undefined" ||
+    !("speechSynthesis" in window)
+  ) {
+    return;
+  }
+
+  if (!text) {
     return;
   }
 
@@ -599,12 +611,20 @@ function speakText(text, language) {
 
   if (language === "ml") {
     utterance.lang = "ml-IN";
-
     utterance.rate = 0.78;
     utterance.pitch = 1;
     utterance.volume = 1;
 
-    const voice = getMalayalamVoice();
+    const voices =
+      window.speechSynthesis.getVoices();
+
+    const voice = voices.find(
+      (item) =>
+        item.lang &&
+        item.lang
+          .toLowerCase()
+          .startsWith("ml")
+    );
 
     if (voice) {
       utterance.voice = voice;
@@ -666,7 +686,9 @@ function App() {
   function zoomIn() {
     setMapZoom((current) =>
       Math.min(
-        Number((current + 0.1).toFixed(1)),
+        Number(
+          (current + 0.1).toFixed(1)
+        ),
         2
       )
     );
@@ -675,7 +697,9 @@ function App() {
   function zoomOut() {
     setMapZoom((current) =>
       Math.max(
-        Number((current - 0.1).toFixed(1)),
+        Number(
+          (current - 0.1).toFixed(1)
+        ),
         0.5
       )
     );
@@ -749,10 +773,23 @@ function App() {
     setShowVoiceLanguage(true);
   }
 
+  /* -------------------------------------------------------
+     VOICE SEARCH
+     Android Chrome + iPhone Safari
+  ------------------------------------------------------- */
+
   function startVoiceSearch(
     selectedStartPoint,
     language
   ) {
+    /*
+      Android Chrome:
+      SpeechRecognition
+
+      iPhone Safari:
+      webkitSpeechRecognition
+    */
+
     const SpeechRecognition =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
@@ -762,18 +799,24 @@ function App() {
 
       const message =
         language === "ml"
-          ? "ഈ ബ്രൗസറിൽ വോയ്സ് സെർച്ച് ലഭ്യമല്ല."
-          : "Voice search is not available in this browser.";
+          ? "ഈ ബ്രൗസറിൽ വോയ്സ് സെർച്ച് ലഭ്യമല്ല. iPhone ആണെങ്കിൽ Safari ഉപയോഗിക്കുക."
+          : "Voice search is not available in this browser. On iPhone, please use Safari.";
 
       setVoiceReply(message);
       setVoiceLanguage(language);
 
-      speakText(message, language);
+      speakText(
+        message,
+        language
+      );
 
       return;
     }
 
-    setStartPoint(selectedStartPoint);
+    setStartPoint(
+      selectedStartPoint
+    );
+
     setShowVoiceLanguage(false);
 
     setVoiceHeard("");
@@ -784,11 +827,20 @@ function App() {
     const recognition =
       new SpeechRecognition();
 
+    /*
+      Select speech recognition language.
+    */
+
     if (language === "ml") {
       recognition.lang = "ml-IN";
     } else {
       recognition.lang = "en-IN";
     }
+
+    /*
+      These settings work for both
+      Android Chrome and iPhone Safari.
+    */
 
     recognition.interimResults = false;
     recognition.continuous = false;
@@ -796,16 +848,30 @@ function App() {
 
     recognition.onstart = () => {
       setIsListening(true);
+      setVoiceError("");
+    };
+
+    recognition.onaudiostart = () => {
+      setIsListening(true);
     };
 
     recognition.onresult = (event) => {
+      if (
+        !event.results ||
+        event.results.length === 0
+      ) {
+        return;
+      }
+
       const transcript =
         event.results[0][0].transcript;
 
       setVoiceHeard(transcript);
 
       const destination =
-        findVoiceDestination(transcript);
+        findVoiceDestination(
+          transcript
+        );
 
       if (!destination) {
         const message =
@@ -888,20 +954,61 @@ function App() {
     recognition.onerror = (event) => {
       setIsListening(false);
 
-      let message;
+      console.log(
+        "Speech recognition error:",
+        event.error
+      );
 
-      if (event.error === "not-allowed") {
+      let message = "";
+
+      if (
+        event.error ===
+        "not-allowed"
+      ) {
         message =
           language === "ml"
-            ? "മൈക്രോഫോൺ ഉപയോഗിക്കാൻ അനുമതി നൽകണം."
-            : "Please allow microphone access.";
+            ? "മൈക്രോഫോൺ ഉപയോഗിക്കാൻ Safari-ക്ക് അനുമതി നൽകണം."
+            : "Please allow microphone access for your browser.";
       } else if (
-        event.error === "no-speech"
+        event.error ===
+        "service-not-allowed"
+      ) {
+        message =
+          language === "ml"
+            ? "വോയ്സ് സെർവീസ് അനുവദിച്ചിട്ടില്ല. iPhone Settings പരിശോധിക്കുക."
+            : "Speech recognition is not allowed. Please check your iPhone settings.";
+      } else if (
+        event.error ===
+        "language-not-supported"
+      ) {
+        message =
+          language === "ml"
+            ? "ഈ ഭാഷയിൽ വോയ്സ് തിരിച്ചറിയൽ ഈ ഉപകരണത്തിൽ ലഭ്യമല്ല."
+            : "Voice recognition for this language is not available on this device.";
+      } else if (
+        event.error ===
+        "no-speech"
       ) {
         message =
           language === "ml"
             ? "ഒന്നും കേൾക്കാനായില്ല. വീണ്ടും ശ്രമിക്കുക."
             : "I could not hear anything. Please try again.";
+      } else if (
+        event.error ===
+        "audio-capture"
+      ) {
+        message =
+          language === "ml"
+            ? "മൈക്രോഫോൺ ലഭ്യമല്ല. Microphone permission പരിശോധിക്കുക."
+            : "The microphone could not be accessed. Please check microphone permission.";
+      } else if (
+        event.error ===
+        "network"
+      ) {
+        message =
+          language === "ml"
+            ? "വോയ്സ് സെർവീസുമായി ബന്ധപ്പെടാൻ കഴിഞ്ഞില്ല. ഇന്റർനെറ്റ് പരിശോധിക്കുക."
+            : "Could not connect to the speech service. Please check your internet connection.";
       } else {
         message =
           language === "ml"
@@ -922,13 +1029,27 @@ function App() {
     };
 
     try {
+      /*
+        Start recognition directly after
+        the user's button selection.
+      */
+
       recognition.start();
+
     } catch (error) {
+      console.log(
+        "Speech recognition start error:",
+        error
+      );
+
       setIsListening(false);
 
-      setVoiceError(
-        "Voice search could not start."
-      );
+      const message =
+        language === "ml"
+          ? "വോയ്സ് സെർച്ച് ആരംഭിക്കാൻ കഴിഞ്ഞില്ല. വീണ്ടും ശ്രമിക്കുക."
+          : "Voice search could not start. Please try again.";
+
+      setVoiceError(message);
     }
   }
 
