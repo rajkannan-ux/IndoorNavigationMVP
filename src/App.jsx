@@ -1,271 +1,167 @@
 import { useMemo, useState } from "react";
 import "./App.css";
 
-/*
-============================================================
-WAYFINDER - APARTMENT INDOOR NAVIGATION MVP
-============================================================
-
-Default starting point:
-Main Entrance
-
-Walkable areas:
-Main Entrance → Foyer → Corridor → Room Doors
-
-Rooms themselves are NOT walkable.
-
-All navigation paths are orthogonal:
-horizontal + vertical only.
-============================================================
-*/
-
-
-/* ============================================================
-   DESTINATIONS
-============================================================ */
-
 const places = {
   "Main Entrance": {
     node: "entrance",
     description: "Starting point",
   },
-
-  "Bedroom 1": {
-    node: "bedroom1Door",
+  "Raj Bedroom": {
+    node: "rajBedroomDoor",
     description: "Raj",
   },
-
-  "Bedroom 2": {
-    node: "bedroom2Door",
+  "Das Bedroom": {
+    node: "dasBedroomDoor",
     description: "Das",
   },
-
-  "Bedroom 3": {
-    node: "bedroom3Door",
-    description: "Jeswin",
+  "Babu Bedroom": {
+    node: "babuBedroomDoor",
+    description: "Babu",
   },
-
   Kitchen: {
     node: "kitchenDoor",
     description: "",
   },
-
   Bathroom: {
     node: "bathroomDoor",
     description: "",
   },
 };
 
-
-/* ============================================================
-   WALKABLE MAP NODES
-
-   Coordinates are based on the 1000 x 650 apartment map.
-============================================================ */
-
 const nodes = {
+  entrance: [900, 720],
 
-  /* Main entrance */
+  foyerBottom: [900, 620],
+  foyerTop: [900, 430],
 
-  entrance: [900, 650],
+  corridorRight: [760, 430],
+  corridorRaj: [720, 430],
+  corridorBathroom: [660, 430],
+  corridorDas: [560, 430],
+  corridorBabu: [450, 430],
+  corridorKitchen: [410, 430],
 
-  /* Foyer */
+  rajBedroomDoor: [720, 360],
+  dasBedroomDoor: [560, 360],
+  babuBedroomDoor: [450, 360],
 
-  foyerBottom: [900, 570],
-  foyerTop: [900, 380],
-
-  /* Corridor */
-
-  corridorRight: [795, 380],
-  corridorBedroom1: [680, 380],
-  corridorBathroom: [680, 420],
-  corridorMiddle: [530, 380],
-  corridorBedroom3: [390, 380],
-  corridorKitchen: [365, 380],
-
-  /* Room doors */
-
-  bedroom1Door: [680, 300],
-  bedroom2Door: [530, 300],
-  bedroom3Door: [390, 300],
-
-  kitchenDoor: [365, 350],
-
-  bathroomDoor: [680, 420],
+  kitchenDoor: [410, 430],
+  bathroomDoor: [660, 480],
 };
 
+const connections = {
+  entrance: ["foyerBottom"],
 
-/* ============================================================
-   WALKABLE CONNECTIONS
+  foyerBottom: ["entrance", "foyerTop"],
 
-   IMPORTANT:
-   Every connection is horizontal or vertical.
-   There are NO diagonal connections.
-============================================================ */
+  foyerTop: ["foyerBottom", "corridorRight"],
 
-const connections = [
+  corridorRight: ["foyerTop", "corridorRaj"],
 
-  /* Entrance → Foyer */
+  corridorRaj: [
+    "corridorRight",
+    "corridorBathroom",
+    "corridorDas",
+    "rajBedroomDoor",
+  ],
 
-  ["entrance", "foyerBottom"],
-  ["foyerBottom", "foyerTop"],
+  corridorBathroom: [
+    "corridorRaj",
+    "bathroomDoor",
+  ],
 
-  /* Foyer → Corridor */
+  corridorDas: [
+    "corridorRaj",
+    "corridorBabu",
+    "dasBedroomDoor",
+  ],
 
-  ["foyerTop", "corridorRight"],
+  corridorBabu: [
+    "corridorDas",
+    "corridorKitchen",
+    "babuBedroomDoor",
+  ],
 
-  /* Corridor */
+  corridorKitchen: [
+    "corridorBabu",
+    "kitchenDoor",
+  ],
 
-  ["corridorRight", "corridorBedroom1"],
-  ["corridorBedroom1", "corridorMiddle"],
-  ["corridorMiddle", "corridorBedroom3"],
-  ["corridorBedroom3", "corridorKitchen"],
+  rajBedroomDoor: ["corridorRaj"],
+  dasBedroomDoor: ["corridorDas"],
+  babuBedroomDoor: ["corridorBabu"],
 
-  /* Bedroom 1 */
+  kitchenDoor: ["corridorKitchen"],
+  bathroomDoor: ["corridorBathroom"],
+};
 
-  ["corridorBedroom1", "bedroom1Door"],
+function distance(a, b) {
+  const [ax, ay] = nodes[a];
+  const [bx, by] = nodes[b];
 
-  /* Bathroom */
-
-  ["corridorBedroom1", "corridorBathroom"],
-  ["corridorBathroom", "bathroomDoor"],
-
-  /* Bedroom 2 */
-
-  ["corridorMiddle", "bedroom2Door"],
-
-  /* Bedroom 3 */
-
-  ["corridorBedroom3", "bedroom3Door"],
-
-  /* Kitchen */
-
-  ["corridorKitchen", "kitchenDoor"],
-];
-
-
-/* ============================================================
-   BUILD GRAPH
-============================================================ */
-
-function buildGraph() {
-
-  const graph = {};
-
-  Object.keys(nodes).forEach((node) => {
-    graph[node] = [];
-  });
-
-  connections.forEach(([a, b]) => {
-
-    const [x1, y1] = nodes[a];
-    const [x2, y2] = nodes[b];
-
-    const distance =
-      Math.abs(x2 - x1) +
-      Math.abs(y2 - y1);
-
-    graph[a].push({
-      node: b,
-      distance,
-    });
-
-    graph[b].push({
-      node: a,
-      distance,
-    });
-
-  });
-
-  return graph;
+  return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
-const graph = buildGraph();
-
-
-/* ============================================================
-   SHORTEST PATH
-   DIJKSTRA
-============================================================ */
-
-function shortestPath(start, end) {
-
-  if (start === end) {
-    return [start];
-  }
-
-  const distance = {};
+function findShortestPath(start, end) {
+  const distances = {};
   const previous = {};
-  const remaining = new Set(
-    Object.keys(graph)
-  );
+  const unvisited = new Set(Object.keys(nodes));
 
-  Object.keys(graph).forEach((node) => {
-    distance[node] = Infinity;
+  Object.keys(nodes).forEach((node) => {
+    distances[node] = Infinity;
     previous[node] = null;
   });
 
-  distance[start] = 0;
+  distances[start] = 0;
 
-  while (remaining.size > 0) {
-
+  while (unvisited.size > 0) {
     let current = null;
-    let smallest = Infinity;
 
-    remaining.forEach((node) => {
-
-      if (distance[node] < smallest) {
-        smallest = distance[node];
+    for (const node of unvisited) {
+      if (
+        current === null ||
+        distances[node] < distances[current]
+      ) {
         current = node;
       }
+    }
 
-    });
-
-    if (current === null) {
+    if (
+      current === null ||
+      distances[current] === Infinity
+    ) {
       break;
     }
 
-    remaining.delete(current);
+    unvisited.delete(current);
 
     if (current === end) {
       break;
     }
 
-    graph[current].forEach(
-      ({ node, distance: edgeDistance }) => {
-
-        if (!remaining.has(node)) {
-          return;
-        }
-
-        const newDistance =
-          distance[current] +
-          edgeDistance;
-
-        if (newDistance < distance[node]) {
-
-          distance[node] = newDistance;
-          previous[node] = current;
-
-        }
-
+    for (const neighbor of connections[current]) {
+      if (!unvisited.has(neighbor)) {
+        continue;
       }
-    );
+
+      const newDistance =
+        distances[current] +
+        distance(current, neighbor);
+
+      if (newDistance < distances[neighbor]) {
+        distances[neighbor] = newDistance;
+        previous[neighbor] = current;
+      }
+    }
   }
 
-
   const path = [];
-
   let current = end;
 
   while (current !== null) {
-
     path.unshift(current);
-
     current = previous[current];
-
   }
-
 
   if (path[0] !== start) {
     return [];
@@ -274,942 +170,870 @@ function shortestPath(start, end) {
   return path;
 }
 
-
-/* ============================================================
-   PATH DISTANCE
-============================================================ */
-
 function getPathDistance(path) {
-
   let total = 0;
 
-  for (let i = 1; i < path.length; i++) {
-
-    const [x1, y1] = nodes[path[i - 1]];
-    const [x2, y2] = nodes[path[i]];
-
-    total +=
-      Math.abs(x2 - x1) +
-      Math.abs(y2 - y1);
-
+  for (let i = 0; i < path.length - 1; i++) {
+    total += distance(
+      path[i],
+      path[i + 1]
+    );
   }
 
   return total;
 }
 
-
-/* ============================================================
-   MULTIPLE DESTINATION OPTIMIZATION
-
-   Small apartment = brute force is fine for MVP.
-============================================================ */
-
-function findBestOrder(
-  startNode,
-  destinations
-) {
-
-  if (destinations.length <= 1) {
-    return destinations;
-  }
-
-  let bestOrder = null;
-  let bestDistance = Infinity;
-
-
-  function generate(
-    currentOrder,
-    remaining
-  ) {
-
-    if (remaining.length === 0) {
-
-      let currentNode = startNode;
-      let totalDistance = 0;
-
-
-      currentOrder.forEach(
-        (destination) => {
-
-          const targetNode =
-            places[destination].node;
-
-          const path =
-            shortestPath(
-              currentNode,
-              targetNode
-            );
-
-          totalDistance +=
-            getPathDistance(path);
-
-          currentNode = targetNode;
-
-        }
-      );
-
-
-      if (totalDistance < bestDistance) {
-
-        bestDistance = totalDistance;
-
-        bestOrder = [
-          ...currentOrder,
-        ];
-
-      }
-
-      return;
-    }
-
-
-    remaining.forEach(
-      (destination, index) => {
-
-        const nextRemaining =
-          [...remaining];
-
-        nextRemaining.splice(index, 1);
-
-        generate(
-          [
-            ...currentOrder,
-            destination,
-          ],
-          nextRemaining
-        );
-
-      }
-    );
-  }
-
-
-  generate([], destinations);
-
-  return bestOrder || destinations;
-}
-
-
-/* ============================================================
-   BUILD COMPLETE ROUTE
-============================================================ */
-
 function buildCompleteRoute(
   startNode,
-  selectedDestinations
+  destinationNames
 ) {
-
-  const ordered =
-    findBestOrder(
-      startNode,
-      selectedDestinations
-    );
-
-  const completePath = [];
-
+  let completePath = [];
   let currentNode = startNode;
 
+  destinationNames.forEach((destinationName) => {
+    const destinationNode =
+      places[destinationName].node;
 
-  ordered.forEach(
-    (destination) => {
+    const path = findShortestPath(
+      currentNode,
+      destinationNode
+    );
 
-      const targetNode =
-        places[destination].node;
-
-      const path =
-        shortestPath(
-          currentNode,
-          targetNode
-        );
-
-
-      path.forEach(
-        (node, index) => {
-
-          if (
-            completePath.length === 0 ||
-            index !== 0
-          ) {
-
-            completePath.push(node);
-
-          }
-
-        }
-      );
-
-
-      currentNode = targetNode;
-
+    if (path.length > 0) {
+      if (completePath.length === 0) {
+        completePath = [...path];
+      } else {
+        completePath = [
+          ...completePath,
+          ...path.slice(1),
+        ];
+      }
     }
-  );
 
+    currentNode = destinationNode;
+  });
 
-  return {
-    ordered,
-    completePath,
-  };
+  return completePath;
 }
 
+/* -------------------------------------------------------
+   VOICE DESTINATION RECOGNITION
+------------------------------------------------------- */
 
-/* ============================================================
+function findVoiceDestination(text) {
+  const value = text
+    .toLowerCase()
+    .replace(/[.,!?]/g, "")
+    .trim();
+
+  if (
+    value.includes("രാജ്") ||
+    value.includes("രാജിന്റെ") ||
+    value.includes("raj")
+  ) {
+    return "Raj Bedroom";
+  }
+
+  if (
+    value.includes("ദാസ്") ||
+    value.includes("ദാസിന്റെ") ||
+    value.includes("das")
+  ) {
+    return "Das Bedroom";
+  }
+
+  if (
+    value.includes("ബാബു") ||
+    value.includes("ബാബുവിന്റെ") ||
+    value.includes("babu")
+  ) {
+    return "Babu Bedroom";
+  }
+
+  if (
+    value.includes("കിച്ചൻ") ||
+    value.includes("കിച്ചന്") ||
+    value.includes("അടുക്കള") ||
+    value.includes("kitchen")
+  ) {
+    return "Kitchen";
+  }
+
+  if (
+    value.includes("ബാത്ത്റൂം") ||
+    value.includes("ബാത്റൂം") ||
+    value.includes("ടോയ്ലറ്റ്") ||
+    value.includes("toilet") ||
+    value.includes("bathroom")
+  ) {
+    return "Bathroom";
+  }
+
+  return null;
+}
+
+/* -------------------------------------------------------
+   ENGLISH REPLIES
+------------------------------------------------------- */
+
+function getMainEntranceEnglishReply(destination) {
+  switch (destination) {
+    case "Raj Bedroom":
+      return "The room straight ahead is Raj's bedroom.";
+
+    case "Das Bedroom":
+      return "Go straight and turn left. The second room on the right is Das's bedroom.";
+
+    case "Babu Bedroom":
+      return "Go straight and turn left. The third room on the right is Babu's bedroom.";
+
+    case "Kitchen":
+      return "Go straight, turn left, and continue straight. The kitchen is there.";
+
+    case "Bathroom":
+      return "Go straight and turn left. The first room on the left is the bathroom.";
+
+    default:
+      return "";
+  }
+}
+
+/* -------------------------------------------------------
+   MALAYALAM REPLIES
+------------------------------------------------------- */
+
+function getMainEntranceMalayalamReply(destination) {
+  switch (destination) {
+    case "Raj Bedroom":
+      return "നേരെ കാണുന്നതാണ് രാജിന്റെ ബെഡ്‌റൂം.";
+
+    case "Das Bedroom":
+      return "നേരെ പോയി ഇടത്തോട്ട് തിരിഞ്ഞാൽ, വലതുവശത്തെ രണ്ടാമത്തെ മുറിയാണ് ദാസിന്റെ ബെഡ്‌റൂം.";
+
+    case "Babu Bedroom":
+      return "നേരെ പോയി ഇടത്തോട്ട് തിരിഞ്ഞാൽ, വലതുവശത്തെ മൂന്നാമത്തെ മുറിയാണ് ബാബുവിന്റെ ബെഡ്‌റൂം.";
+
+    case "Kitchen":
+      return "നേരെ പോയി ഇടത്തോട്ട് തിരിഞ്ഞ് വീണ്ടും നേരെ പോയാൽ കിച്ചൻ ആണ്.";
+
+    case "Bathroom":
+      return "നേരെ പോയി ഇടത്തോട്ട് തിരിഞ്ഞാൽ, ഇടതുവശത്തെ ആദ്യത്തെ മുറിയാണ് ബാത്ത്റൂം.";
+
+    default:
+      return "";
+  }
+}
+
+/* -------------------------------------------------------
+   GENERIC ENGLISH DIRECTIONS
+------------------------------------------------------- */
+
+function getGenericEnglishReply(
+  startPoint,
+  destination,
+  path
+) {
+  if (!path || path.length < 2) {
+    return `${destination} is here.`;
+  }
+
+  const movements = [];
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const [x1, y1] = nodes[path[i]];
+    const [x2, y2] = nodes[path[i + 1]];
+
+    if (x2 > x1) {
+      movements.push("right");
+    } else if (x2 < x1) {
+      movements.push("left");
+    } else if (y2 > y1) {
+      movements.push("down");
+    } else if (y2 < y1) {
+      movements.push("up");
+    }
+  }
+
+  const usefulMovements =
+    movements.filter(
+      (movement, index) =>
+        index === 0 ||
+        movement !== movements[index - 1]
+    );
+
+  if (usefulMovements.length === 0) {
+    return `${destination} is here.`;
+  }
+
+  let reply = `From ${startPoint}, `;
+
+  const firstDirection =
+    usefulMovements[0];
+
+  if (
+    firstDirection === "up" ||
+    firstDirection === "down"
+  ) {
+    reply += "go straight";
+  } else if (firstDirection === "left") {
+    reply += "go left";
+  } else {
+    reply += "go right";
+  }
+
+  for (
+    let i = 1;
+    i < usefulMovements.length;
+    i++
+  ) {
+    const previousDirection =
+      usefulMovements[i - 1];
+
+    const currentDirection =
+      usefulMovements[i];
+
+    if (
+      previousDirection === "up" &&
+      currentDirection === "left"
+    ) {
+      reply += ", then turn left";
+    } else if (
+      previousDirection === "up" &&
+      currentDirection === "right"
+    ) {
+      reply += ", then turn right";
+    } else if (
+      previousDirection === "down" &&
+      currentDirection === "right"
+    ) {
+      reply += ", then turn left";
+    } else if (
+      previousDirection === "down" &&
+      currentDirection === "left"
+    ) {
+      reply += ", then turn right";
+    } else if (
+      previousDirection === "left" &&
+      currentDirection === "up"
+    ) {
+      reply += ", then turn right";
+    } else if (
+      previousDirection === "left" &&
+      currentDirection === "down"
+    ) {
+      reply += ", then turn left";
+    } else if (
+      previousDirection === "right" &&
+      currentDirection === "up"
+    ) {
+      reply += ", then turn left";
+    } else if (
+      previousDirection === "right" &&
+      currentDirection === "down"
+    ) {
+      reply += ", then turn right";
+    }
+  }
+
+  reply += `, and you will reach ${destination}.`;
+
+  return reply;
+}
+
+/* -------------------------------------------------------
+   GENERIC MALAYALAM DIRECTIONS
+------------------------------------------------------- */
+
+function getGenericMalayalamReply(
+  startPoint,
+  destination,
+  path
+) {
+  if (!path || path.length < 2) {
+    return `${destination} ഇവിടെ തന്നെയാണ്.`;
+  }
+
+  const movements = [];
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const [x1, y1] = nodes[path[i]];
+    const [x2, y2] = nodes[path[i + 1]];
+
+    if (x2 > x1) {
+      movements.push("right");
+    } else if (x2 < x1) {
+      movements.push("left");
+    } else if (y2 > y1) {
+      movements.push("down");
+    } else if (y2 < y1) {
+      movements.push("up");
+    }
+  }
+
+  const usefulMovements =
+    movements.filter(
+      (movement, index) =>
+        index === 0 ||
+        movement !== movements[index - 1]
+    );
+
+  if (usefulMovements.length === 0) {
+    return `${destination} ഇവിടെ തന്നെയാണ്.`;
+  }
+
+  let reply = `${startPoint}ൽ നിന്ന് `;
+
+  const firstDirection =
+    usefulMovements[0];
+
+  if (
+    firstDirection === "up" ||
+    firstDirection === "down"
+  ) {
+    reply += "നേരെ പോകുക";
+  } else if (firstDirection === "left") {
+    reply += "ഇടത്തോട്ട് പോകുക";
+  } else {
+    reply += "വലത്തോട്ട് പോകുക";
+  }
+
+  for (
+    let i = 1;
+    i < usefulMovements.length;
+    i++
+  ) {
+    const previousDirection =
+      usefulMovements[i - 1];
+
+    const currentDirection =
+      usefulMovements[i];
+
+    if (
+      previousDirection === "up" &&
+      currentDirection === "left"
+    ) {
+      reply += ", ഇടത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "up" &&
+      currentDirection === "right"
+    ) {
+      reply += ", വലത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "down" &&
+      currentDirection === "right"
+    ) {
+      reply += ", ഇടത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "down" &&
+      currentDirection === "left"
+    ) {
+      reply += ", വലത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "left" &&
+      currentDirection === "up"
+    ) {
+      reply += ", വലത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "left" &&
+      currentDirection === "down"
+    ) {
+      reply += ", ഇടത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "right" &&
+      currentDirection === "up"
+    ) {
+      reply += ", ഇടത്തോട്ട് തിരിയുക";
+    } else if (
+      previousDirection === "right" &&
+      currentDirection === "down"
+    ) {
+      reply += ", വലത്തോട്ട് തിരിയുക";
+    }
+  }
+
+  reply += `, ${destination} എത്തും.`;
+
+  return reply;
+}
+
+/* -------------------------------------------------------
+   TEXT TO SPEECH
+------------------------------------------------------- */
+
+function getMalayalamVoice() {
+  if (!("speechSynthesis" in window)) {
+    return null;
+  }
+
+  const voices =
+    window.speechSynthesis.getVoices();
+
+  const exactVoice = voices.find(
+    (voice) =>
+      voice.lang &&
+      voice.lang.toLowerCase() === "ml-in"
+  );
+
+  if (exactVoice) {
+    return exactVoice;
+  }
+
+  const malayalamVoice = voices.find(
+    (voice) =>
+      voice.lang &&
+      voice.lang.toLowerCase().startsWith("ml")
+  );
+
+  return malayalamVoice || null;
+}
+
+function speakText(text, language) {
+  if (!("speechSynthesis" in window)) {
+    return;
+  }
+
+  window.speechSynthesis.cancel();
+
+  const utterance =
+    new SpeechSynthesisUtterance(text);
+
+  if (language === "ml") {
+    utterance.lang = "ml-IN";
+
+    utterance.rate = 0.78;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const voice = getMalayalamVoice();
+
+    if (voice) {
+      utterance.voice = voice;
+    }
+  } else {
+    utterance.lang = "en-IN";
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+  }
+
+  window.speechSynthesis.speak(
+    utterance
+  );
+}
+
+/* -------------------------------------------------------
    APP
-============================================================ */
+------------------------------------------------------- */
 
 function App() {
-
-  /* Search */
-
-  const [search, setSearch] =
-    useState("");
-
-
-  /* Starting point */
-
   const [startPoint, setStartPoint] =
     useState("Main Entrance");
 
+  const [selectedDestinations, setSelectedDestinations] =
+    useState([]);
 
-  /* Selected destinations */
+  const [showVoiceStart, setShowVoiceStart] =
+    useState(false);
 
-  const [
-    selectedDestinations,
-    setSelectedDestinations,
-  ] = useState([]);
+  const [showVoiceLanguage, setShowVoiceLanguage] =
+    useState(false);
 
+  const [pendingVoiceStart, setPendingVoiceStart] =
+    useState(null);
 
-  /* Zoom */
+  const [isListening, setIsListening] =
+    useState(false);
 
-  const [zoom, setZoom] =
+  const [voiceHeard, setVoiceHeard] =
+    useState("");
+
+  const [voiceReply, setVoiceReply] =
+    useState("");
+
+  const [voiceLanguage, setVoiceLanguage] =
+    useState("en");
+
+  const [voiceError, setVoiceError] =
+    useState("");
+
+  /* -----------------------------------------------------
+     MAP ZOOM
+  ----------------------------------------------------- */
+
+  const [mapZoom, setMapZoom] =
     useState(1);
 
-
-  /* ----------------------------------------------------------
-     SEARCH SUGGESTIONS
-  ---------------------------------------------------------- */
-
-  const suggestions = useMemo(() => {
-
-    if (!search.trim()) {
-      return [];
-    }
-
-
-    return Object.keys(places)
-      .filter(
-        (name) =>
-          name !== startPoint &&
-          name
-            .toLowerCase()
-            .includes(
-              search.toLowerCase()
-            )
-      );
-
-  }, [search, startPoint]);
-
-
-  /* ----------------------------------------------------------
-     ADD DESTINATION
-  ---------------------------------------------------------- */
-
-  function addDestination(destination) {
-
-    if (
-      !selectedDestinations.includes(
-        destination
-      )
-    ) {
-
-      setSelectedDestinations([
-        ...selectedDestinations,
-        destination,
-      ]);
-
-    }
-
-    setSearch("");
-  }
-
-
-  /* ----------------------------------------------------------
-     REMOVE DESTINATION
-  ---------------------------------------------------------- */
-
-  function removeDestination(destination) {
-
-    setSelectedDestinations(
-      selectedDestinations.filter(
-        (item) =>
-          item !== destination
+  function zoomIn() {
+    setMapZoom((current) =>
+      Math.min(
+        Number((current + 0.1).toFixed(1)),
+        2
       )
     );
-
   }
 
-
-  /* ----------------------------------------------------------
-     CHANGE START
-  ---------------------------------------------------------- */
-
-  function changeStartPoint(event) {
-
-    const newStart =
-      event.target.value;
-
-    setStartPoint(newStart);
-
-    /*
-      If the new start was already
-      selected as a destination,
-      remove it.
-    */
-
-    setSelectedDestinations(
-      selectedDestinations.filter(
-        (destination) =>
-          destination !== newStart
+  function zoomOut() {
+    setMapZoom((current) =>
+      Math.max(
+        Number((current - 0.1).toFixed(1)),
+        0.5
       )
     );
-
   }
 
-
-  /* ----------------------------------------------------------
-     CLEAR
-  ---------------------------------------------------------- */
-
-  function clearRoute() {
-
-    setSelectedDestinations([]);
-
-    setSearch("");
-
+  function resetZoom() {
+    setMapZoom(1);
   }
-
-
-  /* ----------------------------------------------------------
-     CALCULATE ROUTE
-  ---------------------------------------------------------- */
 
   const route = useMemo(() => {
-
-    if (
-      selectedDestinations.length === 0
-    ) {
-      return null;
-    }
-
-
     const startNode =
       places[startPoint].node;
-
 
     return buildCompleteRoute(
       startNode,
       selectedDestinations
     );
-
   }, [
     startPoint,
     selectedDestinations,
   ]);
 
+  const nearestPlaces = useMemo(() => {
+    const startNode =
+      places[startPoint].node;
 
-  /* ----------------------------------------------------------
-     SVG ROUTE
-  ---------------------------------------------------------- */
+    return Object.keys(places)
+      .filter(
+        (place) => place !== startPoint
+      )
+      .map((place) => {
+        const path =
+          findShortestPath(
+            startNode,
+            places[place].node
+          );
 
-  const routePoints =
-    route
-      ? route.completePath
-          .map(
-            (node) =>
-              nodes[node].join(",")
-          )
-          .join(" ")
-      : "";
+        return {
+          name: place,
+          distance:
+            getPathDistance(path),
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.distance - b.distance
+      );
+  }, [startPoint]);
 
+  function toggleDestination(place) {
+    if (place === startPoint) {
+      return;
+    }
 
-  /* ==========================================================
-     RENDER
-  ========================================================== */
+    setSelectedDestinations(
+      (current) => {
+        if (current.includes(place)) {
+          return current.filter(
+            (item) => item !== place
+          );
+        }
+
+        return [...current, place];
+      }
+    );
+  }
+
+  function chooseVoiceStart(place) {
+    setPendingVoiceStart(place);
+    setShowVoiceStart(false);
+    setShowVoiceLanguage(true);
+  }
+
+  function startVoiceSearch(
+    selectedStartPoint,
+    language
+  ) {
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setShowVoiceLanguage(false);
+
+      const message =
+        language === "ml"
+          ? "ഈ ബ്രൗസറിൽ വോയ്സ് സെർച്ച് ലഭ്യമല്ല."
+          : "Voice search is not available in this browser.";
+
+      setVoiceReply(message);
+      setVoiceLanguage(language);
+
+      speakText(message, language);
+
+      return;
+    }
+
+    setStartPoint(selectedStartPoint);
+    setShowVoiceLanguage(false);
+
+    setVoiceHeard("");
+    setVoiceReply("");
+    setVoiceError("");
+    setVoiceLanguage(language);
+
+    const recognition =
+      new SpeechRecognition();
+
+    if (language === "ml") {
+      recognition.lang = "ml-IN";
+    } else {
+      recognition.lang = "en-IN";
+    }
+
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.maxAlternatives = 3;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript =
+        event.results[0][0].transcript;
+
+      setVoiceHeard(transcript);
+
+      const destination =
+        findVoiceDestination(transcript);
+
+      if (!destination) {
+        const message =
+          language === "ml"
+            ? "ക്ഷമിക്കണം, ഏത് മുറിയിലേക്കാണ് പോകേണ്ടതെന്ന് മനസ്സിലായില്ല. വീണ്ടും പറയുക."
+            : "Sorry, I could not understand which room you want to go to. Please try again.";
+
+        setVoiceReply(message);
+
+        speakText(
+          message,
+          language
+        );
+
+        return;
+      }
+
+      setSelectedDestinations([
+        destination,
+      ]);
+
+      const startNode =
+        places[selectedStartPoint].node;
+
+      const destinationNode =
+        places[destination].node;
+
+      const path =
+        findShortestPath(
+          startNode,
+          destinationNode
+        );
+
+      let message = "";
+
+      if (language === "ml") {
+        if (
+          selectedStartPoint ===
+          "Main Entrance"
+        ) {
+          message =
+            getMainEntranceMalayalamReply(
+              destination
+            );
+        } else {
+          message =
+            getGenericMalayalamReply(
+              selectedStartPoint,
+              destination,
+              path
+            );
+        }
+      } else {
+        if (
+          selectedStartPoint ===
+          "Main Entrance"
+        ) {
+          message =
+            getMainEntranceEnglishReply(
+              destination
+            );
+        } else {
+          message =
+            getGenericEnglishReply(
+              selectedStartPoint,
+              destination,
+              path
+            );
+        }
+      }
+
+      setVoiceReply(message);
+
+      speakText(
+        message,
+        language
+      );
+    };
+
+    recognition.onerror = (event) => {
+      setIsListening(false);
+
+      let message;
+
+      if (event.error === "not-allowed") {
+        message =
+          language === "ml"
+            ? "മൈക്രോഫോൺ ഉപയോഗിക്കാൻ അനുമതി നൽകണം."
+            : "Please allow microphone access.";
+      } else if (
+        event.error === "no-speech"
+      ) {
+        message =
+          language === "ml"
+            ? "ഒന്നും കേൾക്കാനായില്ല. വീണ്ടും ശ്രമിക്കുക."
+            : "I could not hear anything. Please try again.";
+      } else {
+        message =
+          language === "ml"
+            ? "വോയ്സ് സെർച്ച് ചെയ്യാൻ കഴിഞ്ഞില്ല. വീണ്ടും ശ്രമിക്കുക."
+            : "Voice search could not be completed. Please try again.";
+      }
+
+      setVoiceReply(message);
+
+      speakText(
+        message,
+        language
+      );
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      setIsListening(false);
+
+      setVoiceError(
+        "Voice search could not start."
+      );
+    }
+  }
+
+  function speakAgain() {
+    if (!voiceReply) {
+      return;
+    }
+
+    speakText(
+      voiceReply,
+      voiceLanguage
+    );
+  }
+
+  const routePoints = route
+    .map((node) =>
+      nodes[node].join(",")
+    )
+    .join(" ");
+
+  const startMarker =
+    nodes[places[startPoint].node];
+
+  const destinationMarker =
+    selectedDestinations.length > 0
+      ? nodes[
+          places[
+            selectedDestinations[
+              selectedDestinations.length - 1
+            ]
+          ].node
+        ]
+      : null;
 
   return (
-
     <div className="app">
 
-
-      {/* ======================================================
-          HEADER
-      ====================================================== */}
+      {/* -------------------------------------------------
+          TOP BAR
+      ------------------------------------------------- */}
 
       <header className="top-bar">
 
-        <div className="brand">
-
-          <h1>WayFinder</h1>
+        <div>
+          <h1>Indoor WayFinder</h1>
 
           <p>
-            Indoor Apartment Navigation
+            Find your way inside the building
           </p>
-
         </div>
 
-
-        {/* SEARCH */}
-
-        <div className="search-area">
-
-          <div className="search-box">
-
-            <span className="search-icon">
-              🔎
-            </span>
-
-
-            <input
-              type="text"
-              value={search}
-              placeholder="Where do you want to go?"
-              onChange={(event) =>
-                setSearch(
-                  event.target.value
-                )
-              }
-            />
-
-
-            {search && (
-
-              <button
-                className="clear-search"
-                onClick={() =>
-                  setSearch("")
-                }
-              >
-                ×
-              </button>
-
-            )}
-
-          </div>
-
-
-          {/* SUGGESTIONS */}
-
-          {suggestions.length > 0 && (
-
-            <div className="search-results">
-
-              {suggestions.map(
-                (destination) => (
-
-                  <button
-                    key={destination}
-                    onClick={() =>
-                      addDestination(
-                        destination
-                      )
-                    }
-                  >
-
-                    <span className="suggestion-pin">
-                      ●
-                    </span>
-
-                    <span className="suggestion-text">
-
-                      {destination}
-
-                    </span>
-
-                  </button>
-
-                )
-              )}
-
-            </div>
-
-          )}
-
-        </div>
+        <button
+          className={`voice-button ${
+            isListening
+              ? "listening"
+              : ""
+          }`}
+          onClick={() =>
+            setShowVoiceStart(true)
+          }
+          aria-label="Voice search"
+          title="Voice search"
+        >
+          🎤
+        </button>
 
       </header>
 
-
-      {/* ======================================================
+      {/* -------------------------------------------------
           MAIN
-      ====================================================== */}
+      ------------------------------------------------- */}
 
       <main className="main-content">
 
+        <section className="control-panel">
 
-        {/* ====================================================
-            MAP
-        ==================================================== */}
+          {/* Starting point */}
 
-        <section className="map-card">
+          <div className="card">
 
-
-          <div className="map-header">
-
-            <div>
-
-              <h2>
-                Apartment Layout
-              </h2>
-
-              <p>
-                Select a starting point and destination
-              </p>
-
-            </div>
-
-
-            {/* ZOOM */}
-
-            <div className="zoom-controls">
-
-              <button
-                onClick={() =>
-                  setZoom(
-                    Math.min(
-                      zoom + 0.15,
-                      3
-                    )
-                  )
-                }
-              >
-                +
-              </button>
-
-
-              <div className="zoom-level">
-
-                {Math.round(
-                  zoom * 100
-                )}
-                %
-
-              </div>
-
-
-              <button
-                onClick={() =>
-                  setZoom(
-                    Math.max(
-                      zoom - 0.15,
-                      0.50
-                    )
-                  )
-                }
-              >
-                −
-              </button>
-
-            </div>
-
-          </div>
-
-
-          {/* ==================================================
-              MAP VIEWPORT
-          ================================================== */}
-
-          <div className="map-viewport">
-
-            <div
-              className="floor-plan"
-              style={{
-                transform:
-                  `scale(${zoom})`,
-              }}
-            >
-
-
-              {/* =================================================
-                  ROUTE
-              ================================================= */}
-
-              {route && (
-
-                <svg
-                  className="route-layer"
-                  viewBox="0 0 1000 650"
-                  preserveAspectRatio="none"
-                >
-
-                  {/* White outline */}
-
-                  <polyline
-                    points={routePoints}
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="15"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-
-                  {/* Blue route */}
-
-                  <polyline
-                    points={routePoints}
-                    fill="none"
-                    stroke="#1976d2"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-
-                  {/* Direction dots */}
-
-                  {route.completePath
-                    .slice(0, -1)
-                    .map(
-                      (node, index) => {
-
-                        const nextNode =
-                          route
-                            .completePath[
-                              index + 1
-                            ];
-
-
-                        const [x1, y1] =
-                          nodes[node];
-
-                        const [x2, y2] =
-                          nodes[nextNode];
-
-
-                        const distance =
-                          Math.abs(
-                            x2 - x1
-                          ) +
-                          Math.abs(
-                            y2 - y1
-                          );
-
-
-                        if (
-                          distance < 50
-                        ) {
-                          return null;
-                        }
-
-
-                        const midX =
-                          (x1 + x2) / 2;
-
-                        const midY =
-                          (y1 + y2) / 2;
-
-
-                        return (
-
-                          <circle
-                            key={
-                              `${node}-${index}`
-                            }
-                            cx={midX}
-                            cy={midY}
-                            r="4"
-                            fill="white"
-                          />
-
-                        );
-
-                      }
-                    )}
-
-                </svg>
-
-              )}
-
-
-              {/* =================================================
-                  BEDROOM 3
-              ================================================= */}
-
-              <div className="room bedroom3">
-
-                <div>
-
-                  <h3>
-                    Bedroom 3
-                  </h3>
-
-                  <p>
-                    Jeswin
-                  </p>
-
-                </div>
-
-              </div>
-
-
-              {/* =================================================
-                  BEDROOM 2
-              ================================================= */}
-
-              <div className="room bedroom2">
-
-                <div>
-
-                  <h3>
-                    Bedroom 2
-                  </h3>
-
-                  <p>
-                    Das
-                  </p>
-
-                </div>
-
-              </div>
-
-
-              {/* =================================================
-                  BEDROOM 1
-              ================================================= */}
-
-              <div className="room bedroom1">
-
-                <div>
-
-                  <h3>
-                    Bedroom 1
-                  </h3>
-
-                  <p>
-                    Raj
-                  </p>
-
-                </div>
-
-              </div>
-
-
-              {/* =================================================
-                  KITCHEN
-              ================================================= */}
-
-              <div className="room kitchen">
-
-                <h3>
-                  Kitchen
-                </h3>
-
-              </div>
-
-
-              {/* =================================================
-                  CORRIDOR
-              ================================================= */}
-
-              <div className="corridor">
-
-                <span>
-                  Corridor
-                </span>
-
-              </div>
-
-
-              {/* =================================================
-                  BATHROOM
-              ================================================= */}
-
-              <div className="room bathroom">
-
-                <h3>
-                  Bathroom
-                </h3>
-
-              </div>
-
-
-              {/* =================================================
-                  FOYER
-              ================================================= */}
-
-              <div className="foyer">
-
-                <span>
-                  Foyer
-                </span>
-
-              </div>
-
-
-              {/* =================================================
-                  ROOM DOORS
-              ================================================= */}
-
-              <div className="door bedroom3-door">
-                <span />
-              </div>
-
-
-              <div className="door bedroom2-door">
-                <span />
-              </div>
-
-
-              <div className="door bedroom1-door">
-                <span />
-              </div>
-
-
-              <div className="door kitchen-door">
-                <span />
-              </div>
-
-
-              <div className="door bathroom-door">
-                <span />
-              </div>
-
-
-              {/* =================================================
-                  MAIN ENTRANCE
-              ================================================= */}
-
-              <div className="main-entrance">
-
-                <div className="entrance-door">
-
-                  <div className="door-panel" />
-
-                  <div className="door-handle" />
-
-                </div>
-
-
-                <div className="entrance-text">
-
-                  Main Entrance
-
-                </div>
-
-              </div>
-
-
-              {/* =================================================
-                  DESTINATION MARKERS
-              ================================================= */}
-
-              {route &&
-                route.ordered.map(
-                  (destination, index) => {
-
-                    const node =
-                      places[
-                        destination
-                      ].node;
-
-                    const [x, y] =
-                      nodes[node];
-
-
-                    return (
-
-                      <div
-                        key={destination}
-                        className="destination-marker"
-                        style={{
-                          left:
-                            x - 15,
-                          top:
-                            y - 15,
-                        }}
-                      >
-
-                        {index + 1}
-
-                      </div>
-
-                    );
-
-                  }
-                )}
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* ====================================================
-            NAVIGATION PANEL
-        ==================================================== */}
-
-        <section className="navigation-panel">
-
-
-          <div className="navigation-heading">
-
-            <div>
-
-              <h2>
-                Navigation
-              </h2>
-
-              <p>
-                Choose your starting point
-                and destinations.
-              </p>
-
-            </div>
-
-
-            {selectedDestinations.length >
-              0 && (
-
-              <button
-                className="clear-button"
-                onClick={clearRoute}
-              >
-                Clear all
-              </button>
-
-            )}
-
-          </div>
-
-
-          {/* ==================================================
-              STARTING POINT
-          ================================================== */}
-
-          <div className="start-selector">
-
-            <label>
-              Starting point
-            </label>
-
+            <h2>Starting Point</h2>
 
             <select
               value={startPoint}
-              onChange={
-                changeStartPoint
-              }
+              onChange={(event) => {
+
+                setStartPoint(
+                  event.target.value
+                );
+
+                setSelectedDestinations(
+                  []
+                );
+
+              }}
             >
 
               {Object.keys(places).map(
                 (place) => (
-
                   <option
                     key={place}
                     value={place}
                   >
                     {place}
                   </option>
-
                 )
               )}
 
@@ -1217,152 +1041,120 @@ function App() {
 
           </div>
 
+          {/* Destination */}
 
-          {/* ==================================================
-              SELECTED DESTINATIONS
-          ================================================== */}
+          <div className="card">
 
-          {route && (
+            <h2>
+              Where do you want to go?
+            </h2>
 
-            <div className="route-list">
+            <div className="destination-list">
 
+              {Object.keys(places)
+                .filter(
+                  (place) =>
+                    place !== startPoint
+                )
+                .map((place) => (
 
-              <div className="route-step">
-
-                <div className="step-number start-number">
-                  🚪
-                </div>
-
-
-                <div className="step-content">
-
-                  <strong>
-                    {startPoint}
-                  </strong>
-
-                  <small>
-                    Starting point
-                  </small>
-
-                </div>
-
-              </div>
-
-
-              {route.ordered.map(
-                (destination, index) => (
-
-                  <div
-                    className="route-step"
-                    key={destination}
+                  <button
+                    key={place}
+                    className={`destination-button ${
+                      selectedDestinations.includes(
+                        place
+                      )
+                        ? "selected"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      toggleDestination(
+                        place
+                      )
+                    }
                   >
 
-                    <div className="step-number">
+                    <span>
+                      {place}
+                    </span>
 
-                      {index + 1}
+                    {selectedDestinations.includes(
+                      place
+                    ) && (
+                      <span>✓</span>
+                    )}
 
-                    </div>
+                  </button>
 
-
-                    <div className="step-content">
-
-                      <strong>
-                        {destination}
-                      </strong>
-
-
-                      {places[
-                        destination
-                      ].description && (
-
-                        <small>
-
-                          {
-                            places[
-                              destination
-                            ].description
-                          }
-
-                        </small>
-
-                      )}
-
-                    </div>
-
-
-                    <button
-                      className="remove-button"
-                      onClick={() =>
-                        removeDestination(
-                          destination
-                        )
-                      }
-                    >
-                      ×
-                    </button>
-
-                  </div>
-
-                )
-              )}
+                ))}
 
             </div>
 
-          )}
+          </div>
 
+          {/* Nearest */}
 
-          {/* ==================================================
-              EMPTY STATE
-          ================================================== */}
+          <div className="nearest-panel">
 
-          {!route && (
+            <h2>
+              Nearest from start
+            </h2>
 
-            <div className="empty-route">
+            {nearestPlaces.map(
+              (place, index) => (
 
-              <div className="empty-icon">
-                🔎
-              </div>
+                <div
+                  className="nearest-row"
+                  key={place.name}
+                >
 
-              <strong>
-                Search for a destination
-              </strong>
+                  <span>
+                    {index + 1}.{" "}
+                    {place.name}
+                  </span>
 
-              <small>
-                Choose a room from the search
-                bar above.
-              </small>
+                  <span>
+                    {place.distance} units
+                  </span>
 
-            </div>
+                </div>
 
-          )}
+              )
+            )}
 
+          </div>
 
-          {/* ==================================================
-              ADD MORE
-          ================================================== */}
+          {/* Navigation */}
 
           {selectedDestinations.length >
             0 && (
 
-            <div className="add-target">
+            <div className="navigation-card">
 
-              <span>
-                ＋
-              </span>
+              <h2>Navigation</h2>
 
-
-              <div>
-
+              <p>
+                From{" "}
                 <strong>
-                  Add another destination
+                  {startPoint}
                 </strong>
+              </p>
 
-                <small>
-                  Use the search bar above
-                  to add another room.
-                </small>
+              <ol>
 
-              </div>
+                {selectedDestinations.map(
+                  (destination) => (
+
+                    <li
+                      key={destination}
+                    >
+                      {destination}
+                    </li>
+
+                  )
+                )}
+
+              </ol>
 
             </div>
 
@@ -1370,10 +1162,591 @@ function App() {
 
         </section>
 
+        {/* -------------------------------------------------
+            MAP
+        ------------------------------------------------- */}
+
+        <section className="map-card">
+
+          {/* Zoom controls */}
+
+          <div className="map-zoom-controls">
+
+            <button
+              onClick={zoomOut}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              −
+            </button>
+
+            <button
+              className="zoom-percentage"
+              onClick={resetZoom}
+              aria-label="Reset zoom"
+              title="Reset zoom"
+            >
+              {Math.round(
+                mapZoom * 100
+              )}%
+            </button>
+
+            <button
+              onClick={zoomIn}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              +
+            </button>
+
+          </div>
+
+          {/* Map viewport */}
+
+          <div className="map-viewport">
+
+            <svg
+              className="floor-map"
+              viewBox="0 0 1100 800"
+              style={{
+                transform:
+                  `scale(${mapZoom})`,
+              }}
+            >
+
+              {/* Outer wall */}
+
+              <rect
+                x="100"
+                y="70"
+                width="900"
+                height="650"
+                className="wall"
+              />
+
+              {/* Bedroom vertical walls */}
+
+              <line
+                x1="470"
+                y1="70"
+                x2="470"
+                y2="360"
+                className="wall-line"
+              />
+
+              <line
+                x1="650"
+                y1="70"
+                x2="650"
+                y2="360"
+                className="wall-line"
+              />
+
+              {/* Bedroom / corridor walls */}
+
+              <line
+                x1="100"
+                y1="360"
+                x2="430"
+                y2="360"
+                className="wall-line"
+              />
+
+              <line
+                x1="500"
+                y1="360"
+                x2="530"
+                y2="360"
+                className="wall-line"
+              />
+
+              <line
+                x1="590"
+                y1="360"
+                x2="700"
+                y2="360"
+                className="wall-line"
+              />
+
+              <line
+                x1="760"
+                y1="360"
+                x2="1000"
+                y2="360"
+                className="wall-line"
+              />
+
+              {/* Kitchen wall */}
+
+              <line
+                x1="410"
+                y1="360"
+                x2="410"
+                y2="395"
+                className="wall-line"
+              />
+
+              <line
+                x1="410"
+                y1="465"
+                x2="410"
+                y2="720"
+                className="wall-line"
+              />
+
+              {/* Bathroom */}
+
+              <rect
+                x="520"
+                y="480"
+                width="240"
+                height="240"
+                className="room-outline"
+              />
+
+              {/* Bathroom door opening */}
+
+              <line
+                x1="520"
+                y1="480"
+                x2="620"
+                y2="480"
+                className="wall-line"
+              />
+
+              <line
+                x1="700"
+                y1="480"
+                x2="760"
+                y2="480"
+                className="wall-line"
+              />
+
+              {/* -------------------------------------------------
+                  DOORS
+              ------------------------------------------------- */}
+
+              {/* Raj bedroom door */}
+
+              <line
+                x1="700"
+                y1="360"
+                x2="700"
+                y2="315"
+                className="door-line"
+              />
+
+              <path
+                d="M700 360 A45 45 0 0 1 745 315"
+                className="door-arc"
+              />
+
+              {/* Das bedroom door */}
+
+              <line
+                x1="530"
+                y1="360"
+                x2="530"
+                y2="315"
+                className="door-line"
+              />
+
+              <path
+                d="M530 360 A45 45 0 0 1 575 315"
+                className="door-arc"
+              />
+
+              {/* Babu bedroom door */}
+
+              <line
+                x1="430"
+                y1="360"
+                x2="430"
+                y2="315"
+                className="door-line"
+              />
+
+              <path
+                d="M430 360 A45 45 0 0 1 475 315"
+                className="door-arc"
+              />
+
+              {/* Kitchen door */}
+
+              <line
+                x1="410"
+                y1="395"
+                x2="455"
+                y2="395"
+                className="door-line"
+              />
+
+              <path
+                d="M410 395 A45 45 0 0 1 455 440"
+                className="door-arc"
+              />
+
+              {/* Bathroom door */}
+
+              <line
+                x1="620"
+                y1="480"
+                x2="620"
+                y2="525"
+                className="door-line"
+              />
+
+              <path
+                d="M620 480 A45 45 0 0 0 665 525"
+                className="door-arc"
+              />
+
+              {/* Main entrance door */}
+
+              <line
+                x1="855"
+                y1="720"
+                x2="855"
+                y2="675"
+                className="door-line"
+              />
+
+              <path
+                d="M855 720 A45 45 0 0 1 900 675"
+                className="door-arc"
+              />
+
+              {/* -------------------------------------------------
+                  LABELS
+              ------------------------------------------------- */}
+
+              <text
+                x="275"
+                y="200"
+                className="room-label"
+              >
+                Bedroom 3
+              </text>
+
+              <text
+                x="275"
+                y="230"
+                className="room-sub-label"
+              >
+                Babu
+              </text>
+
+              <text
+                x="560"
+                y="200"
+                className="room-label"
+              >
+                Bedroom 2
+              </text>
+
+              <text
+                x="560"
+                y="230"
+                className="room-sub-label"
+              >
+                Das
+              </text>
+
+              <text
+                x="825"
+                y="200"
+                className="room-label"
+              >
+                Bedroom 1
+              </text>
+
+              <text
+                x="825"
+                y="230"
+                className="room-sub-label"
+              >
+                Raj
+              </text>
+
+              <text
+                x="240"
+                y="560"
+                className="room-label"
+              >
+                Kitchen
+              </text>
+
+              <text
+                x="600"
+                y="610"
+                className="room-label"
+              >
+                Bathroom
+              </text>
+
+              <text
+                x="700"
+                y="405"
+                className="area-label"
+              >
+                Corridor
+              </text>
+
+              <text
+                x="850"
+                y="560"
+                className="area-label"
+              >
+                Foyer
+              </text>
+
+              <text
+                x="850"
+                y="755"
+                className="area-label"
+              >
+                Main Entrance
+              </text>
+
+              {/* -------------------------------------------------
+                  ROUTE
+              ------------------------------------------------- */}
+
+              {route.length > 1 && (
+                <>
+                  <polyline
+                    points={routePoints}
+                    className="route-shadow"
+                  />
+
+                  <polyline
+                    points={routePoints}
+                    className="route-line"
+                  />
+                </>
+              )}
+
+              {/* Start marker */}
+
+              <circle
+                cx={startMarker[0]}
+                cy={startMarker[1]}
+                r="15"
+                className="start-marker"
+              />
+
+              {/* Destination marker */}
+
+              {destinationMarker && (
+                <circle
+                  cx={destinationMarker[0]}
+                  cy={destinationMarker[1]}
+                  r="15"
+                  className="destination-marker"
+                />
+              )}
+
+            </svg>
+
+          </div>
+
+        </section>
+
       </main>
 
-    </div>
+      {/* -------------------------------------------------------
+          STARTING POINT MODAL
+      ------------------------------------------------------- */}
 
+      {showVoiceStart && (
+
+        <div className="voice-overlay">
+
+          <div className="voice-modal">
+
+            <h2>
+              Where are you starting from?
+            </h2>
+
+            <p>
+              Select your starting point.
+            </p>
+
+            <div className="voice-start-options">
+
+              {Object.keys(places).map(
+                (place) => (
+
+                  <button
+                    key={place}
+                    onClick={() =>
+                      chooseVoiceStart(
+                        place
+                      )
+                    }
+                  >
+                    {place}
+                  </button>
+
+                )
+              )}
+
+            </div>
+
+            <button
+              className="voice-cancel"
+              onClick={() =>
+                setShowVoiceStart(false)
+              }
+            >
+              Cancel
+            </button>
+
+          </div>
+
+        </div>
+
+      )}
+
+      {/* -------------------------------------------------------
+          LANGUAGE MODAL
+      ------------------------------------------------------- */}
+
+      {showVoiceLanguage && (
+
+        <div className="voice-overlay">
+
+          <div className="voice-modal">
+
+            <h2>
+              Choose language
+            </h2>
+
+            <p>
+              Choose the language you want to
+              speak.
+            </p>
+
+            <div className="language-options">
+
+              <button
+                className="language-button"
+                onClick={() =>
+                  startVoiceSearch(
+                    pendingVoiceStart,
+                    "en"
+                  )
+                }
+              >
+                🇬🇧 English
+              </button>
+
+              <button
+                className="language-button"
+                onClick={() =>
+                  startVoiceSearch(
+                    pendingVoiceStart,
+                    "ml"
+                  )
+                }
+              >
+                🇮🇳 മലയാളം
+              </button>
+
+            </div>
+
+            <button
+              className="voice-cancel"
+              onClick={() => {
+
+                setShowVoiceLanguage(
+                  false
+                );
+
+                setPendingVoiceStart(null);
+
+              }}
+            >
+              Cancel
+            </button>
+
+          </div>
+
+        </div>
+
+      )}
+
+      {/* -------------------------------------------------------
+          VOICE RESULT
+      ------------------------------------------------------- */}
+
+      {(isListening ||
+        voiceHeard ||
+        voiceReply ||
+        voiceError) && (
+
+        <div className="voice-status">
+
+          {isListening && (
+
+            <div className="listening-text">
+              🎤 Listening...
+            </div>
+
+          )}
+
+          {voiceHeard && (
+
+            <div className="voice-heard">
+
+              <strong>
+                You said:
+              </strong>{" "}
+
+              {voiceHeard}
+
+            </div>
+
+          )}
+
+          {voiceReply && (
+
+            <div className="voice-reply">
+
+              <strong>
+                {voiceLanguage === "ml"
+                  ? "ഉത്തരം:"
+                  : "Reply:"}
+              </strong>
+
+              <p>
+                {voiceReply}
+              </p>
+
+              <button
+                className="speak-again"
+                onClick={speakAgain}
+              >
+                🔊 Speak again
+              </button>
+
+            </div>
+
+          )}
+
+          {voiceError && (
+
+            <div className="voice-error">
+              {voiceError}
+            </div>
+
+          )}
+
+        </div>
+
+      )}
+
+    </div>
   );
 }
 
