@@ -782,14 +782,6 @@ function App() {
     selectedStartPoint,
     language
   ) {
-    /*
-      Android Chrome:
-      SpeechRecognition
-
-      iPhone Safari:
-      webkitSpeechRecognition
-    */
-
     const SpeechRecognition =
       window.SpeechRecognition ||
       window.webkitSpeechRecognition;
@@ -827,20 +819,11 @@ function App() {
     const recognition =
       new SpeechRecognition();
 
-    /*
-      Select speech recognition language.
-    */
-
     if (language === "ml") {
       recognition.lang = "ml-IN";
     } else {
       recognition.lang = "en-IN";
     }
-
-    /*
-      These settings work for both
-      Android Chrome and iPhone Safari.
-    */
 
     recognition.interimResults = false;
     recognition.continuous = false;
@@ -1029,13 +1012,7 @@ function App() {
     };
 
     try {
-      /*
-        Start recognition directly after
-        the user's button selection.
-      */
-
       recognition.start();
-
     } catch (error) {
       console.log(
         "Speech recognition start error:",
@@ -1799,6 +1776,10 @@ function App() {
 
       {/* -------------------------------------------------------
           VOICE RESULT
+          
+          IMPORTANT:
+          This is AFTER <main>, so it stays below the
+          complete room layout and never overlays it.
       ------------------------------------------------------- */}
 
       {(isListening ||
@@ -1806,64 +1787,68 @@ function App() {
         voiceReply ||
         voiceError) && (
 
-        <div className="voice-status">
+        <section className="voice-status-section">
 
-          {isListening && (
+          <div className="voice-status">
 
-            <div className="listening-text">
-              🎤 Listening...
-            </div>
+            {isListening && (
 
-          )}
+              <div className="listening-text">
+                🎤 Listening...
+              </div>
 
-          {voiceHeard && (
+            )}
 
-            <div className="voice-heard">
+            {voiceHeard && (
 
-              <strong>
-                You said:
-              </strong>{" "}
+              <div className="voice-heard">
 
-              {voiceHeard}
+                <strong>
+                  You said:
+                </strong>{" "}
 
-            </div>
+                {voiceHeard}
 
-          )}
+              </div>
 
-          {voiceReply && (
+            )}
 
-            <div className="voice-reply">
+            {voiceReply && (
 
-              <strong>
-                {voiceLanguage === "ml"
-                  ? "ഉത്തരം:"
-                  : "Reply:"}
-              </strong>
+              <div className="voice-reply">
 
-              <p>
-                {voiceReply}
-              </p>
+                <strong>
+                  {voiceLanguage === "ml"
+                    ? "ഉത്തരം:"
+                    : "Reply:"}
+                </strong>
 
-              <button
-                className="speak-again"
-                onClick={speakAgain}
-              >
-                🔊 Speak again
-              </button>
+                <p>
+                  {voiceReply}
+                </p>
 
-            </div>
+                <button
+                  className="speak-again"
+                  onClick={speakAgain}
+                >
+                  🔊 Speak again
+                </button>
 
-          )}
+              </div>
 
-          {voiceError && (
+            )}
 
-            <div className="voice-error">
-              {voiceError}
-            </div>
+            {voiceError && (
 
-          )}
+              <div className="voice-error">
+                {voiceError}
+              </div>
 
-        </div>
+            )}
+
+          </div>
+
+        </section>
 
       )}
 
@@ -1872,3 +1857,4 @@ function App() {
 }
 
 export default App;
+
