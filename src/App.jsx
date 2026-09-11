@@ -709,6 +709,34 @@ function App() {
     setMapZoom(1);
   }
 
+  /* -----------------------------------------------------
+     AUTOMATICALLY SCROLL TO MAP
+     
+     This is used after a voice destination is
+     successfully recognized.
+  ----------------------------------------------------- */
+
+  function scrollToMap() {
+    const mapCard =
+      document.querySelector(".map-card");
+
+    if (!mapCard) {
+      return;
+    }
+
+    const mapPosition =
+      mapCard.getBoundingClientRect().top +
+      window.scrollY;
+
+    window.scrollTo({
+      top: Math.max(
+        mapPosition - 10,
+        0
+      ),
+      behavior: "smooth",
+    });
+  }
+
   const route = useMemo(() => {
     const startNode =
       places[startPoint].node;
@@ -872,9 +900,24 @@ function App() {
         return;
       }
 
+      /* -------------------------------------------------
+         DESTINATION FOUND
+
+         Select destination and automatically scroll
+         the page to the map.
+      ------------------------------------------------- */
+
       setSelectedDestinations([
         destination,
       ]);
+
+      /*
+         Wait briefly so the route/state update can
+         start before scrolling to the map.
+      */
+      setTimeout(() => {
+        scrollToMap();
+      }, 100);
 
       const startNode =
         places[selectedStartPoint].node;
@@ -1777,9 +1820,7 @@ function App() {
       {/* -------------------------------------------------------
           VOICE RESULT
           
-          IMPORTANT:
-          This is AFTER <main>, so it stays below the
-          complete room layout and never overlays it.
+          This stays below the complete map.
       ------------------------------------------------------- */}
 
       {(isListening ||
@@ -1857,4 +1898,3 @@ function App() {
 }
 
 export default App;
-
